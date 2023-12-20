@@ -110,8 +110,8 @@ spec:
         - -c
         - 'echo 3 > /proc/sys/vm/drop_caches'
         securityContext:
-          privileged: {{ $.Values.initContainers.increaseMapCount.cleanoscache.privileged | default true }}
-          runAsUser: {{ $.Values.initContainers.increaseMapCount.cleanoscache.runAsUserr | default 0 | int }}
+          privileged: {{ $.Values.initContainers.cleanoscache.securityContext.privileged | default true }}
+          runAsUser: {{ $.Values.initContainers.cleanoscache.securityContext.runAsUser | default 0 | int }}
       {{- end }}
       containers:
       - name: db
