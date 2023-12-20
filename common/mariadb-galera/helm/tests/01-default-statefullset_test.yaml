@@ -1,0 +1,952 @@
+
+---
+checksums:
+  my.cnf: &mycnf "25a9bd0d9df58ed9bb1b2b8d3a31d6bdd2a0f6b4d4e277da2c0feec2d64ccc42"
+  configmap: &configmap "f8c17888b9c86327163a41eaf4b9b07672cbfacbfe4e7c0b6bc9b2430b142205"
+
+suite: statefulset-mariadb
+values:
+  - default_values.yaml
+set:
+  mariadb.galera.clustername: "testname"
+release:
+  name: testrelease
+  namespace: testnamespace
+templates:
+  - statefulset-mariadb.yaml
+  - configmap-mariadb-my.cnf.yaml
+  - configmap-mariadb.yaml
+tests:
+  - it: metadata without clustername
+    template: statefulset-mariadb.yaml
+    set:
+      mariadb.galera.clustername: "testclustername"
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - equal:
+          path: metadata.namespace
+          value: "testnamespace"
+      - equal:
+          path: metadata.name
+          value: "testrelease-mariadb-g"
+      - equal:
+          path: metadata.labels.app
+          value: "testrelease"
+      - equal:
+          path: metadata.labels.component
+          value: "database"
+      - equal:
+          path: metadata.labels.release
+          value: "testrelease"
+
+  - it: metadata with included clustername
+    template: statefulset-mariadb.yaml
+    set:
+      mariadb.galera.clustername: "testclustername"
+      namePrefix:
+        includeClusterName: true
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - equal:
+          path: metadata.namespace
+          value: "testnamespace"
+      - equal:
+          path: metadata.name
+          value: "testrelease-testclustername-mariadb-g"
+      - equal:
+          path: metadata.labels.app
+          value: "testrelease"
+      - equal:
+          path: metadata.labels.component
+          value: "database"
+      - equal:
+          path: metadata.labels.release
+          value: "testrelease"
+
+  - it: default common spec
+    template: statefulset-mariadb.yaml
+    set:
+      mariadb.galera.clustername: "testclustername"
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 3
+      - equal:
+          path: spec.serviceName
+          value: "testrelease"
+      - equal:
+          path: spec.selector.matchLabels.component
+          value: "database"
+      - equal:
+          path: spec.revisionHistoryLimit
+          value: 3
+      - equal:
+          path: spec.podManagementPolicy
+          value: "Parallel"
+      - equal:
+          path: spec.updateStrategy.type
+          value: "RollingUpdate"
+
+  - it: set values to common spec
+    template: statefulset-mariadb.yaml
+    set:
+      mariadb.galera.clustername: "testclustername"
+      replicas.database: 5
+      revisionHistoryLimit: 5
+      podManagementPolicy: null
+      updateStrategy: "OnDelete"
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 5
+      - equal:
+          path: spec.revisionHistoryLimit
+          value: 5
+      - equal:
+          path: spec.podManagementPolicy
+          value: "OrderedReady"
+      - equal:
+          path: spec.updateStrategy.type
+          value: "OnDelete"
+
+  - it: default common spec template
+    template: statefulset-mariadb.yaml
+    set:
+      mariadb.galera.clustername: "testclustername"
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels.app
+          value: "testrelease"
+      - equal:
+          path: spec.template.metadata.labels.component
+          value: "database"
+      - equal:
+          path: spec.template.metadata.labels.release
+          value: "testrelease"
+      - isNull:
+          path: spec.template.metadata.annotations["prometheus.io/scrape"]
+      - isNull:
+          path: spec.template.metadata.annotations["prometheus.io/port"]
+      - isNull:
+          path: spec.template.metadata.annotations["prometheus.io/target"]
+      - isNull:
+          path: spec.template.metadata.annotations["linkerd.io/inject"]
+      - equal:
+          path: spec.template.metadata.annotations["checksum/my.cnf"]
+          value: *mycnf
+      - equal:
+          path: spec.template.metadata.annotations.checksum/configmap
+          value: *configmap
+
+  - it: common spec template with set values
+    template: statefulset-mariadb.yaml
+    set:
+      mariadb.galera.clustername: "testclustername"
+      monitoring.mysqld_exporter.enabled: true
+      maririadb.linkerd.enabled: true
+      global.linkerd_enabled: true
+      global.linkerd_requested: true
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels.app
+          value: "testrelease"
+      - equal:
+          path: spec.template.metadata.labels.component
+          value: "database"
+      - equal:
+          path: spec.template.metadata.labels.release
+          value: "testrelease"
+      - equal:
+          path: spec.template.metadata.annotations["prometheus.io/scrape"]
+          value: "true"
+      - equal:
+          path: spec.template.metadata.annotations["prometheus.io/port"]
+          value: "9104"
+      - equal:
+          path: spec.template.metadata.annotations["prometheus.io/targets"]
+          value: "prometheus"
+      - equal:
+          path: spec.template.metadata.annotations["linkerd.io/inject"]
+          value: "enabled"
+      - equal:
+          path: spec.template.metadata.annotations["checksum/my.cnf"]
+          value: *mycnf
+      - equal:
+          path: spec.template.metadata.annotations.checksum/configmap
+          value: *configmap
+
+  - it: linkerd annotations disabled globally
+    template: statefulset-mariadb.yaml
+    set:
+      mariadb.galera.clustername: "testclustername"
+      monitoring.mysqld_exporter.enabled: true
+      maririadb.linkerd.enabled: true
+      #global.linkerd_enabled: true
+      global.linkerd_requested: true
+    asserts:
+      - isNull:
+          path: spec.template.metadata.annotations["linkerd.io/inject"]
+
+  # TOBEFIXED: linkerd annotations disabled on service level
+  - it: linkerd annotations disabled on service level
+    template: statefulset-mariadb.yaml
+    set:
+      mariadb.galera.clustername: "testclustername"
+      monitoring.mysqld_exporter.enabled: true
+      #maririadb.linkerd.enabled: true
+      global.linkerd_enabled: true
+      global.linkerd_requested: true
+    asserts:
+      - isNotNull: #TOBE Null
+          path: spec.template.metadata.annotations["linkerd.io/inject"]
+
+  - it: affinity configurations
+    template: statefulset-mariadb.yaml
+    set:
+      mariadb.galera.clustername: "testclustername"
+    asserts:
+      - equal:
+          path: spec.template.spec.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution[0].podAffinityTerm.labelSelector.matchExpressions[0].key
+          value: "app"
+      - equal:
+          path: spec.template.spec.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution[0].podAffinityTerm.labelSelector.matchExpressions[0].operator
+          value: "In"
+      - equal:
+          path: spec.template.spec.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution[0].podAffinityTerm.labelSelector.matchExpressions[0].values[0]
+          value: "testrelease"
+      - equal:
+          path: spec.template.spec.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution[0].podAffinityTerm.labelSelector.matchExpressions[1].key
+          value: "component"
+      - equal:
+          path: spec.template.spec.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution[0].podAffinityTerm.labelSelector.matchExpressions[1].operator
+          value: "In"
+      - equal:
+          path: spec.template.spec.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution[0].podAffinityTerm.labelSelector.matchExpressions[1].values[0]
+          value: "database"
+      - equal:
+          path: spec.template.spec.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution[0].weight
+          value: 1
+      - equal:
+          path: spec.template.spec.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution[0].podAffinityTerm.topologyKey
+          value: "topology.kubernetes.io/zone"
+      - equal:
+          path: spec.template.spec.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution[1].podAffinityTerm.labelSelector.matchExpressions[0].key
+          value: "app"
+      - equal:
+          path: spec.template.spec.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution[1].podAffinityTerm.labelSelector.matchExpressions[0].operator
+          value: "In"
+      - equal:
+          path: spec.template.spec.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution[1].podAffinityTerm.labelSelector.matchExpressions[0].values[0]
+          value: "testrelease"
+      - equal:
+          path: spec.template.spec.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution[1].podAffinityTerm.labelSelector.matchExpressions[1].key
+          value: "component"
+      - equal:
+          path: spec.template.spec.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution[1].podAffinityTerm.labelSelector.matchExpressions[1].operator
+          value: "In"
+      - equal:
+          path: spec.template.spec.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution[1].podAffinityTerm.labelSelector.matchExpressions[1].values[0]
+          value: "database"
+      - equal:
+          path: spec.template.spec.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution[1].weight
+          value: 2
+      - equal:
+          path: spec.template.spec.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution[1].podAffinityTerm.topologyKey
+          value: "kubernetes.io/hostname"
+
+  - it: default security config
+    template: statefulset-mariadb.yaml
+    set:
+      mariadb.galera.clustername: "testclustername"
+    asserts:
+      - equal:
+          path: spec.template.spec.serviceAccount
+          value: "testrelease-mariadb-galera"
+      - equal:
+          path: spec.template.spec.securityContext.fsGroup
+          value: 101
+      - equal:
+          path: spec.template.spec.securityContext.runAsUser
+          value: 101
+      - equal:
+          path: spec.template.spec.securityContext.runAsGroup
+          value: 101
+      - notExists:
+          path: spec.template.spec.imagePullSecrets[0].name
+
+  - it: set security config
+    template: statefulset-mariadb.yaml
+    set:
+      mariadb.galera.clustername: "testclustername"
+      userId.database: 555
+      groupId.database: 999
+      image.database.pullSecret: "databasePullSecret"
+    asserts:
+      - equal:
+          path: spec.template.spec.serviceAccount
+          value: "testrelease-mariadb-galera"
+      - equal:
+          path: spec.template.spec.securityContext.fsGroup
+          value: 999
+      - equal:
+          path: spec.template.spec.securityContext.runAsUser
+          value: 555
+      - equal:
+          path: spec.template.spec.securityContext.runAsGroup
+          value: 999
+      - equal:
+          path: spec.template.spec.imagePullSecrets[0].name
+          value: "testrelease-databasePullSecret"
+
+  - it: default initContainers [sysctl-tcp-keepalive]
+    template: statefulset-mariadb.yaml
+    set:
+      mariadb.galera.clustername: "testclustername"
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: "sysctl-tcp-keepalive"
+      - equal:
+          path: spec.template.spec.initContainers[0].image
+          value: "keppel.eu-de-1.cloud.sap/ccloud/mariadb-galera-ubuntu:22.04-20231117111140"
+      - equal:
+          path: spec.template.spec.initContainers[0].imagePullPolicy
+          value: "IfNotPresent"
+      - equal:
+          path: spec.template.spec.initContainers[0].command[0]
+          value: "sh"
+      - equal:
+          path: spec.template.spec.initContainers[0].command[1]
+          value: "-c"
+      - equal:
+          path: spec.template.spec.initContainers[0].command[2]
+          value: "sysctl -w net.ipv4.tcp_keepalive_time=60 net.ipv4.tcp_keepalive_intvl=60 net.ipv4.tcp_keepalive_probes=5"
+      - equal:
+          path: spec.template.spec.initContainers[0].securityContext.privileged
+          value: true
+      - equal:
+          path: spec.template.spec.initContainers[0].securityContext.runAsUser
+          value: 0
+
+  - it: set initContainers [sysctl-tcp-keepalive] config
+    template: statefulset-mariadb.yaml
+    set:
+      mariadb.galera.clustername: "testclustername"
+      image.os.registry: "registry"
+      image.os.project: "project"
+      image.os.databasename: "database"
+      image.os.databaseversion: "databaseversion"
+      image.os.imageversion: "18122005"
+      image.os.pullPolicy: "always"
+      #TODO 
+      initContainers.tcpKeepAlive.securityContext.privileged: false #the if condition is failing, if it set to false which means the vaule is always true.
+      initContainers.tcpKeepAlive.securityContext.runAsUser: 555
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: "sysctl-tcp-keepalive"
+      - equal:
+          path: spec.template.spec.initContainers[0].image
+          value: "registry/project/database:databaseversion-18122005"
+      - equal:
+          path: spec.template.spec.initContainers[0].imagePullPolicy
+          value: "always"
+      - equal:
+          path: spec.template.spec.initContainers[0].command[0]
+          value: "sh"
+      - equal:
+          path: spec.template.spec.initContainers[0].command[1]
+          value: "-c"
+      - equal:
+          path: spec.template.spec.initContainers[0].command[2]
+          value: "sysctl -w net.ipv4.tcp_keepalive_time=60 net.ipv4.tcp_keepalive_intvl=60 net.ipv4.tcp_keepalive_probes=5"
+      - equal:
+          path: spec.template.spec.initContainers[0].securityContext.privileged
+          value: false
+      - equal:
+          path: spec.template.spec.initContainers[0].securityContext.runAsUser
+          value: 555
+
+  - it: default initContainers [increase-map-count]
+    template: statefulset-mariadb.yaml
+    set:
+      mariadb.galera.clustername: "testclustername"
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[1].name
+          value: "increase-map-count"
+      - equal:
+          path: spec.template.spec.initContainers[1].image
+          value: "keppel.eu-de-1.cloud.sap/ccloud/mariadb-galera-ubuntu:22.04-20231117111140"
+      - equal:
+          path: spec.template.spec.initContainers[1].imagePullPolicy
+          value: "IfNotPresent"
+      - equal:
+          path: spec.template.spec.initContainers[1].command[0]
+          value: "sh"
+      - equal:
+          path: spec.template.spec.initContainers[1].command[1]
+          value: "-c"
+      - equal:
+          path: spec.template.spec.initContainers[1].command[2]
+          value: "echo 262144 > /proc/sys/vm/max_map_count"
+      - equal:
+          path: spec.template.spec.initContainers[1].securityContext.privileged
+          value: true
+      - equal:
+          path: spec.template.spec.initContainers[1].securityContext.runAsUser
+          value: 0
+
+  - it: set initContainers [increase-map-count] config
+    template: statefulset-mariadb.yaml
+    set:
+      mariadb.galera.clustername: "testclustername"
+      image.os.registry: "registry"
+      image.os.project: "project"
+      image.os.databasename: "database"
+      image.os.databaseversion: "databaseversion"
+      image.os.imageversion: "18122005"
+      image.os.pullPolicy: "always"
+      #TODO 
+      initContainers.increaseMapCount.securityContext.privileged: false #the if condition is failing, if it set to false which means the vaule is always true.
+      initContainers.increaseMapCount.securityContext.runAsUser: 555
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[1].name
+          value: "increase-map-count"
+      - equal:
+          path: spec.template.spec.initContainers[1].image
+          value: "registry/project/database:databaseversion-18122005"
+      - equal:
+          path: spec.template.spec.initContainers[1].imagePullPolicy
+          value: "always"
+      - equal:
+          path: spec.template.spec.initContainers[1].command[0]
+          value: "sh"
+      - equal:
+          path: spec.template.spec.initContainers[1].command[1]
+          value: "-c"
+      - equal:
+          path: spec.template.spec.initContainers[1].command[2]
+          value: "echo 262144 > /proc/sys/vm/max_map_count"
+      - equal:
+          path: spec.template.spec.initContainers[1].securityContext.privileged
+          value: false
+      - equal:
+          path: spec.template.spec.initContainers[1].securityContext.runAsUser
+          value: 555
+
+  - it: default initContainers [clean-os-cache] not activated
+    template: statefulset-mariadb.yaml
+    set:
+      mariadb.galera.clustername: "testclustername"
+    asserts:
+      - notExists:
+          path: spec.template.spec.initContainers[2].name
+      - notExists:
+          path: spec.template.spec.initContainers[2].image
+      - notExists:
+          path: spec.template.spec.initContainers[2].imagePullPolicy
+      - notExists:
+          path: spec.template.spec.initContainers[2].command[0]
+      - notExists:
+          path: spec.template.spec.initContainers[2].command[1]
+      - notExists:
+          path: spec.template.spec.initContainers[2].command[2]
+      - notExists:
+          path: spec.template.spec.initContainers[2].securityContext.privileged
+      - notExists:
+          path: spec.template.spec.initContainers[2].securityContext.runAsUser
+
+  - it: default initContainers [clean-os-cache] activated
+    template: statefulset-mariadb.yaml
+    set:
+      mariadb.galera.clustername: "testclustername"
+      cleanOsCacheAtStartup: true
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[2].name
+          value: "clean-os-cache"
+      - equal:
+          path: spec.template.spec.initContainers[2].image
+          value: "keppel.eu-de-1.cloud.sap/ccloud/mariadb-galera-ubuntu:22.04-20231117111140"
+      - equal:
+          path: spec.template.spec.initContainers[2].imagePullPolicy
+          value: "IfNotPresent"
+      - equal:
+          path: spec.template.spec.initContainers[2].command[0]
+          value: "sh"
+      - equal:
+          path: spec.template.spec.initContainers[2].command[1]
+          value: "-c"
+      - equal:
+          path: spec.template.spec.initContainers[2].command[2]
+          value: "echo 3 > /proc/sys/vm/drop_caches"
+      - equal:
+          path: spec.template.spec.initContainers[2].securityContext.privileged
+          value: true
+      - equal:
+          path: spec.template.spec.initContainers[2].securityContext.runAsUser
+          value: 0
+
+  - it: set initContainers [clean-os-cache] config
+    template: statefulset-mariadb.yaml
+    set:
+      mariadb.galera.clustername: "testclustername"
+      cleanOsCacheAtStartup: true
+      image.os.registry: "registry"
+      image.os.project: "project"
+      image.os.databasename: "database"
+      image.os.databaseversion: "databaseversion"
+      image.os.imageversion: "18122005"
+      image.os.pullPolicy: "always"
+      #TODO 
+      initContainers.cleanoscache.securityContext.privileged: false #the if condition is failing, if it set to false which means the vaule is always true.
+      initContainers.cleanoscache.securityContext.runAsUser: 555
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[2].name
+          value: "clean-os-cache"
+      - equal:
+          path: spec.template.spec.initContainers[2].image
+          value: "registry/project/database:databaseversion-18122005"
+      - equal:
+          path: spec.template.spec.initContainers[2].imagePullPolicy
+          value: "always"
+      - equal:
+          path: spec.template.spec.initContainers[2].command[0]
+          value: "sh"
+      - equal:
+          path: spec.template.spec.initContainers[2].command[1]
+          value: "-c"
+      - equal:
+          path: spec.template.spec.initContainers[2].command[2]
+          value: "echo 3 > /proc/sys/vm/drop_caches"
+      - equal:
+          path: spec.template.spec.initContainers[2].securityContext.privileged
+          value: false
+      - equal:
+          path: spec.template.spec.initContainers[2].securityContext.runAsUser
+          value: 555
+
+  - it: default db container
+    template: statefulset-mariadb.yaml
+    set:
+      mariadb.galera.clustername: "testclustername"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: "db"
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: "keppel.eu-de-1.cloud.sap/ccloud/mariadb-galera:10.5.22-20231117111140"
+      - equal:
+          path: spec.template.spec.containers[0].imagePullPolicy
+          value: "IfNotPresent"
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.runAsUser
+          value: 101
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.runAsGroup
+          value: 101
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.capabilities.add[0]
+          value: "IPC_LOCK"
+      - notExists:
+          path: spec.template.spec.containers[0].command[0]
+      - notExists:
+          path: spec.template.spec.containers[0].command[1]
+      - notExists:
+          path: spec.template.spec.containers[0].command[2]
+
+  - it: set db container autostart config
+    template: statefulset-mariadb.yaml
+    set:
+      mariadb.galera.clustername: "testclustername"
+      image.database.registry: "registry"
+      image.database.project: "project"
+      image.database.databasename: "database"
+      image.database.databaseversion: "databaseversion"
+      image.database.imageversion: "18122005"
+      image.database.pullPolicy: "always"
+      userId.database: 555
+      groupId.database: 999
+      command.database:
+        - "sh"
+        - "-c"
+        - "/bin/sleep 3600"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: "db"
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: "registry/project/database:databaseversion-18122005"
+      - equal:
+          path: spec.template.spec.containers[0].imagePullPolicy
+          value: "always"
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.runAsUser
+          value: 555
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.runAsGroup
+          value: 999
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.capabilities.add[0]
+          value: "IPC_LOCK"
+      - equal:
+          path: spec.template.spec.containers[0].command[0]
+          value: "sh"
+      - equal:
+          path: spec.template.spec.containers[0].command[1]
+          value: "-c"
+      - equal:
+          path: spec.template.spec.containers[0].command[2]
+          value: "/bin/sleep 3600"
+
+  - it: set db container not autostart config
+    template: statefulset-mariadb.yaml
+    set:
+      mariadb.galera.clustername: "testclustername"
+      image.database.registry: "registry"
+      image.database.project: "project"
+      image.database.databasename: "database"
+      image.database.databaseversion: "databaseversion"
+      image.database.imageversion: "18122005"
+      image.database.pullPolicy: "always"
+      userId.database: 555
+      groupId.database: 999
+      mariadb.autostart: false
+      command.database:
+        - "sh"
+        - "-c"
+        - "/bin/sleep 3600"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: "db"
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: "registry/project/database:databaseversion-18122005"
+      - equal:
+          path: spec.template.spec.containers[0].imagePullPolicy
+          value: "always"
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.runAsUser
+          value: 555
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.runAsGroup
+          value: 999
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.capabilities.add[0]
+          value: "IPC_LOCK"
+      - equal:
+          path: spec.template.spec.containers[0].command[0]
+          value: "sh"
+      - equal:
+          path: spec.template.spec.containers[0].command[1]
+          value: "-c"
+      - equal:
+          path: spec.template.spec.containers[0].command[2]
+          value: "/bin/sleep 86400"
+
+  - it: default db container environment variables
+    template: statefulset-mariadb.yaml
+    set:
+      mariadb.galera.clustername: "testclustername"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[0].name
+          value: "MYSQL_PORT"
+      - equal:
+          path: spec.template.spec.containers[0].env[0].value
+          value: "3306"
+      - equal:
+          path: spec.template.spec.containers[0].env[1].name
+          value: "GALERA_PORT"
+      - equal:
+          path: spec.template.spec.containers[0].env[1].value
+          value: "4567"
+      - equal:
+          path: spec.template.spec.containers[0].env[2].name
+          value: "PC_WEIGHT_0"
+      - equal:
+          path: spec.template.spec.containers[0].env[2].value
+          value: "1"
+      - equal:
+          path: spec.template.spec.containers[0].env[3].name
+          value: "PC_WEIGHT_1"
+      - equal:
+          path: spec.template.spec.containers[0].env[3].value
+          value: "1"
+      - equal:
+          path: spec.template.spec.containers[0].env[4].name
+          value: "PC_WEIGHT_2"
+      - equal:
+          path: spec.template.spec.containers[0].env[4].value
+          value: "1"
+      - equal:
+          path: spec.template.spec.containers[0].env[5].name
+          value: "PC_RECOVERY"
+      - equal:
+          path: spec.template.spec.containers[0].env[5].value
+          value: "false"
+      - equal:
+          path: spec.template.spec.containers[0].env[6].name
+          value: "MARIADB_CLUSTER_NAME"
+      - equal:
+          path: spec.template.spec.containers[0].env[6].value
+          value: "testclustername"
+      - equal:
+          path: spec.template.spec.containers[0].env[7].name
+          value: "MARIADB_DATADIR"
+      - equal:
+          path: spec.template.spec.containers[0].env[7].value
+          value: "/opt/mariadb/data"
+      - equal:
+          path: spec.template.spec.containers[0].env[8].name
+          value: "MARIADB_LOGDIR"
+      - equal:
+          path: spec.template.spec.containers[0].env[8].value
+          value: "/opt/mariadb/log"
+      - equal:
+          path: spec.template.spec.containers[0].env[9].name
+          value: "MARIADB_MONITORING_CONNECTION_LIMIT"
+      - equal:
+          path: spec.template.spec.containers[0].env[9].value
+          value: "6"
+      - equal:
+          path: spec.template.spec.containers[0].env[10].name
+          value: "MARIADB_ROOT_PASSWORD"
+      - equal:
+          path: spec.template.spec.containers[0].env[10].valueFrom.secretKeyRef.name
+          value: "testrelease-mariadb-root"
+      - equal:
+          path: spec.template.spec.containers[0].env[10].valueFrom.secretKeyRef.key
+          value: "password"
+      - equal:
+          path: spec.template.spec.containers[0].env[11].name
+          value: "MARIADB_ROOT_USERNAME"
+      - equal:
+          path: spec.template.spec.containers[0].env[11].valueFrom.secretKeyRef.name
+          value: "testrelease-mariadb-root"
+      - equal:
+          path: spec.template.spec.containers[0].env[11].valueFrom.secretKeyRef.key
+          value: "username"
+      - notExists:
+          path: spec.template.spec.containers[0].env[12].name
+      - notExists:
+          path: spec.template.spec.containers[0].env[12].valueFrom.secretKeyRef.name
+      - notExists:
+          path: spec.template.spec.containers[0].env[12].valueFrom.secretKeyRef.key
+
+  - it: set db container environment variables (consistent secret names)
+    template: statefulset-mariadb.yaml
+    set:
+      mariadb.galera.clustername: "testclustername"
+      services.database.frontend.ports.mysql.targetPort: 7777
+      services.database.backend.ports.galera.targetPort: 8888
+      mariadb.galera.weightedQuorum: true
+      mariadb.galera.pcrecovery: true
+      env.MARIADB_MONITORING_CONNECTION_LIMIT: null
+      volumeMounts.database.data.mountPath: "/opt/test/data"
+      volumeMounts.database.log.mountPath: "/opt/test/log"
+      mariadb.users.root.secretName: test-root
+      env.MARIADB_ROOT_USERNAME:
+        secretName: test-root
+        secretKey: username
+        containerType:
+          - database
+      env.MARIADB_ROOT_PASSWORD:
+        secretName: test-root
+        secretKey: password
+        containerType:
+          - database
+      env.MARIADB_TEST_VARD:
+        value: "testvar"
+        containerType:
+          - database
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[0].name
+          value: "MYSQL_PORT"
+      - equal:
+          path: spec.template.spec.containers[0].env[0].value
+          value: "7777"
+      - equal:
+          path: spec.template.spec.containers[0].env[1].name
+          value: "GALERA_PORT"
+      - equal:
+          path: spec.template.spec.containers[0].env[1].value
+          value: "8888"
+      - equal:
+          path: spec.template.spec.containers[0].env[2].name
+          value: "PC_WEIGHT_0"
+      - equal:
+          path: spec.template.spec.containers[0].env[2].value
+          value: "4"
+      - equal:
+          path: spec.template.spec.containers[0].env[3].name
+          value: "PC_WEIGHT_1"
+      - equal:
+          path: spec.template.spec.containers[0].env[3].value
+          value: "2"
+      - equal:
+          path: spec.template.spec.containers[0].env[4].name
+          value: "PC_WEIGHT_2"
+      - equal:
+          path: spec.template.spec.containers[0].env[4].value
+          value: "1"
+      - equal:
+          path: spec.template.spec.containers[0].env[5].name
+          value: "PC_RECOVERY"
+      - equal:
+          path: spec.template.spec.containers[0].env[5].value
+          value: "true"
+      - equal:
+          path: spec.template.spec.containers[0].env[6].name
+          value: "MARIADB_CLUSTER_NAME"
+      - equal:
+          path: spec.template.spec.containers[0].env[6].value
+          value: "testclustername"
+      - equal:
+          path: spec.template.spec.containers[0].env[7].name
+          value: "MARIADB_MONITORING_CONNECTION_LIMIT"
+      - equal:
+          path: spec.template.spec.containers[0].env[7].value
+          value: 3
+      - equal:
+          path: spec.template.spec.containers[0].env[8].name
+          value: "MARIADB_DATADIR"
+      - equal:
+          path: spec.template.spec.containers[0].env[8].value
+          value: "/opt/test/data"
+      - equal:
+          path: spec.template.spec.containers[0].env[9].name
+          value: "MARIADB_LOGDIR"
+      - equal:
+          path: spec.template.spec.containers[0].env[9].value
+          value: "/opt/test/log"
+      - equal:
+          path: spec.template.spec.containers[0].env[10].name
+          value: "MARIADB_ROOT_PASSWORD"
+      - equal:
+          path: spec.template.spec.containers[0].env[10].valueFrom.secretKeyRef.name
+          value: "testrelease-test-root"
+      - equal:
+          path: spec.template.spec.containers[0].env[10].valueFrom.secretKeyRef.key
+          value: "password"
+      - equal:
+          path: spec.template.spec.containers[0].env[11].name
+          value: "MARIADB_ROOT_USERNAME"
+      - equal:
+          path: spec.template.spec.containers[0].env[11].valueFrom.secretKeyRef.name
+          value: "testrelease-test-root"
+      - equal:
+          path: spec.template.spec.containers[0].env[11].valueFrom.secretKeyRef.key
+          value: "username"
+      - equal:
+          path: spec.template.spec.containers[0].env[12].name
+          value: "MARIADB_TEST_VARD"
+      - equal:
+          path: spec.template.spec.containers[0].env[12].value
+          value: "testvar"
+
+  - it: set db container environment variables (inconsistent secret names)
+    template: statefulset-mariadb.yaml
+    set:
+      mariadb.galera.clustername: "testclustername"
+      mariadb.users.root.secretName: test-root-user
+      env.MARIADB_ROOT_USERNAME:
+        secretName: test-root
+        secretKey: username
+        containerType:
+          - database
+      env.MARIADB_ROOT_PASSWORD:
+        secretName: test-root
+        secretKey: password
+        containerType:
+          - database
+      env.MARIADB_TEST_VARD:
+        value: "testvar"
+        containerType:
+          - database
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[9].name
+          value: "MARIADB_MONITORING_CONNECTION_LIMIT"
+      - equal:
+          path: spec.template.spec.containers[0].env[9].value
+          value: "6"
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: "MARIADB_ROOT_PASSWORD"
+            valueFrom:
+              secretKeyRef:
+                name: "testrelease-test-root"
+                key: "password"
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: "MARIADB_ROOT_USERNAME"
+            valueFrom:
+              secretKeyRef:
+                name: "testrelease-test-root"
+                key: "username"
+      - equal:
+          path: spec.template.spec.containers[0].env[10].name
+          value: "MARIADB_TEST_VARD"
+      - equal:
+          path: spec.template.spec.containers[0].env[10].value
+          value: "testvar"
+
+  - it: set db container environment variables (not for database container)
+    template: statefulset-mariadb.yaml
+    set:
+      mariadb.galera.clustername: "testclustername"
+      mariadb.users.root.secretName: test-root
+      env.MARIADB_ROOT_USERNAME:
+        secretName: test-root
+        secretKey: username
+        containerType:
+          - notdatabase
+      env.MARIADB_ROOT_PASSWORD:
+        secretName: test-root
+        secretKey: password
+        containerType:
+          - notdatabase
+      env.MARIADB_TEST_VARD:
+        value: "testvar"
+        containerType:
+          - notdatabase
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[9].name
+          value: "MARIADB_MONITORING_CONNECTION_LIMIT"
+      - equal:
+          path: spec.template.spec.containers[0].env[9].value
+          value: "6"
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: "MARIADB_ROOT_PASSWORD"
+            valueFrom:
+              secretKeyRef:
+                name: "testrelease-test-root"
+                key: "password"
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: "MARIADB_ROOT_USERNAME"
+            valueFrom:
+              secretKeyRef:
+                name: "testrelease-test-root"
+                key: "username"
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: "MARIADB_TEST_VARD"
+            value: "testvar"
